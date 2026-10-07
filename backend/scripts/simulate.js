@@ -34,7 +34,9 @@ async function waitForReplies(expected, predicate, timeoutMs = 60_000) {
   }
 
   throw new Error(`Timed out waiting for ${expected} replies`);
-}`n`nconst RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+const RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 function runScopedWaId(prefix, suffix = "") {
   return `wamid.${prefix}.${RUN_ID}${suffix ? `.${suffix}` : ""}`;
