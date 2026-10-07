@@ -86,6 +86,34 @@ Then open http://localhost:3000.
 
 These are assessment demo credentials only; do not reuse them in production.
 
+## WhatsApp / Meta Cloud API boundary
+
+The assessment intentionally uses a simulated Meta/WhatsApp transport, so no Meta account or phone number is required. The inbound contract is nevertheless shaped for the real Cloud API:
+
+- `POST /webhook/whatsapp` accepts Meta-style message payloads.
+- `metadata.phone_number_id` selects the tenant.
+- `X-Hub-Signature-256` is verified with `WHATSAPP_APP_SECRET`.
+- `GET /webhook/whatsapp` supports Meta webhook verification using `WHATSAPP_VERIFY_TOKEN`.
+- `WHATSAPP_MODE=mock` stores outbound messages in MongoDB for the assessment.
+- `WHATSAPP_MODE=real` uses the WhatsApp Cloud API text-message endpoint with `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_GRAPH_VERSION`, and `WHATSAPP_GRAPH_BASE_URL`.
+
+Meta's Cloud API sends outbound messages through `POST /{version}/{phone-number-id}/messages`; the implementation keeps that integration behind the existing sender interface.
+
+## Production scaling / 10,000 simultaneous leads
+
+For a production deployment at much higher concurrency, I would:
+
+1. Run multiple stateless API instances behind a load balancer.
+2. Keep webhook acknowledgement independent from LLM execution and move to a durable outbox/transactional handoff if message/job durability becomes stricter than Redis enqueue acknowledgement.
+3. Scale BullMQ workers horizontally and keep per-lead ordering with a distributed sequencing/locking strategy.
+4. Partition or shard queues by workload/tenant tier so a large tenant cannot monopolize worker capacity.
+5. Move tenant lookup and hot configuration to a distributed cache with bounded TTL and invalidation.
+6. Add MongoDB replica sets, appropriate compound indexes, retention/archival for message history, and query profiling.
+7. Add provider rate-limit handling, circuit breakers, token/cost budgets, and model fallback.
+8. Add centralized logs, metrics, traces, alerting, and dead-letter replay tooling.
+9. Use Meta Cloud API delivery/status webhooks for outbound delivery state rather than assuming an API request equals delivery.
+10. Keep production developer simulation disabled and store all credentials in a managed secret store.
+
 ## Assessment source of truth
 
 The implementation follows the supplied Digital Box assessment specification, including its required scripts, tests, dashboard behavior, seed data, reliability requirements, and submission artifacts.
