@@ -6,6 +6,32 @@ const { enqueueMessage } = require("../queue/queue");
 
 const router = express.Router();
 
+const TENANT_CACHE_TTL_MS = 30_000;
+const tenantCache = new Map();
+
+async function findTenantByPhoneNumberId(phoneNumberId) {
+  const now = Date.now();
+  const cached = tenantCache.get(phoneNumberId);
+  if (cached && cached.expiresAt > now && cached.tenant) return cached.tenant;
+  if (cached?.promise) return cached.promise;
+
+  const promise = Tenant.findOne({ phoneNumberId }).lean()
+    .then((tenant) => {
+      tenantCache.set(phoneNumberId, {
+        tenant,
+        expiresAt: Date.now() + TENANT_CACHE_TTL_MS,
+      });
+      return tenant;
+    })
+    .catch((error) => {
+      tenantCache.delete(phoneNumberId);
+      throw error;
+    });
+
+  tenantCache.set(phoneNumberId, { promise, expiresAt: now + TENANT_CACHE_TTL_MS });
+  return promise;
+}
+
 router.post("/whatsapp", async (req, res, next) => {
   const receivedAt = new Date();
 
@@ -18,7 +44,7 @@ router.post("/whatsapp", async (req, res, next) => {
     }
 
     const phoneNumberId = value.metadata?.phone_number_id;
-    const tenant = await Tenant.findOne({ phoneNumberId }).lean();
+    const tenant = await findTenantByPhoneNumberId(phoneNumberId);
 
     if (!tenant) {
       console.warn(`[WEBHOOK UNKNOWN TENANT] phoneNumberId=${phoneNumberId}`);
@@ -70,19 +96,27 @@ router.post("/whatsapp", async (req, res, next) => {
       throw error;
     }
 
-    await enqueueMessage({
+    const jobData = {
       accountId: tenant.accountId,
       leadId: String(lead._id),
       messageId: message.id,
       phoneNumberId,
       receivedAt: receivedAt.toISOString(),
+    };
+
+    // Acknowledge immediately after durable persistence; queue delivery continues asynchronously.
+    res.status(200).json({ received: true });
+
+    enqueueMessage(jobData).catch((error) => {
+      console.error(
+        `[WEBHOOK QUEUE ERROR] accountId=${tenant.accountId} leadId=${lead._id} waMessageId=${message.id}`,
+        error,
+      );
     });
 
     console.log(
       `[WEBHOOK] accountId=${tenant.accountId} leadId=${lead._id} waMessageId=${message.id}`,
     );
-
-    return res.status(200).json({ received: true });
   } catch (error) {
     return next(error);
   }
