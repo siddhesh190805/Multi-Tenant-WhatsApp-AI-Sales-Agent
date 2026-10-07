@@ -61,7 +61,7 @@ def _llm_response(state: AgentState) -> str:
     )
 
     model = ChatGoogleGenerativeAI(
-        model=os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
+        model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
         google_api_key=api_key,
         timeout=20,
         max_retries=0,

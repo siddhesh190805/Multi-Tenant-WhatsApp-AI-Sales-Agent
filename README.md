@@ -22,7 +22,7 @@ The real agent uses **Gemini 3.8 Flash**, a current stable/GA Gemini model suite
 Copy `ai/.env.example` to `ai/.env` and provide:
 
 - `GEMINI_API_KEY`
-- `GEMINI_MODEL` (defaults to `gemini-3.8-flash`)
+- `GEMINI_MODEL` (defaults to `gemini-2.5-flash`)
 - `LLM_MODE=real`
 
 The API key is intentionally not included in this repository. For load testing without an external LLM, use `LLM_MODE=mock`.
