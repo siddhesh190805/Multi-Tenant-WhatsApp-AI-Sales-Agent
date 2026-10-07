@@ -22,6 +22,19 @@ async function findTenantByPhoneNumberId(phoneNumberId) {
   return promise;
 }
 
+router.get("/whatsapp", (req, res) => {
+  const env = getEnv();
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+
+  if (mode === "subscribe" && env.webhookVerifyToken && token === env.webhookVerifyToken && challenge) {
+    return res.status(200).type("text/plain").send(challenge);
+  }
+
+  return res.status(403).json({ error: "Webhook verification failed" });
+});
+
 router.post("/whatsapp", verifyWhatsAppSignature, async (req, res, next) => {
   const receivedAt = new Date();
   try {
