@@ -1,20 +1,24 @@
 require("dotenv").config();
 
-const app = require("./app");
-const { getEnv } = require("./config/env");
 const { connectDatabase, disconnectDatabase } = require("./config/database");
+const { createWorker } = require("./queue/worker");
 
 async function start() {
-  const env = getEnv();
   await connectDatabase();
 
-  const server = app.listen(env.port, () => {
-    console.log(`HTTP server listening on port ${env.port}`);
+  const worker = createWorker();
+  worker.on("failed", (job, error) => {
+    console.error("[QUEUE FAILED]", {
+      jobId: job?.id,
+      error: error.message,
+    });
   });
 
+  console.log("BullMQ worker started");
+
   const shutdown = async (signal) => {
-    console.log(`Received ${signal}, shutting down...`);
-    await new Promise((resolve) => server.close(resolve));
+    console.log(`Received ${signal}, shutting down worker...`);
+    await worker.close();
     await disconnectDatabase();
     process.exit(0);
   };
@@ -24,6 +28,6 @@ async function start() {
 }
 
 start().catch((error) => {
-  console.error("[STARTUP ERROR]", error);
+  console.error("[WORKER STARTUP ERROR]", error);
   process.exit(1);
 });

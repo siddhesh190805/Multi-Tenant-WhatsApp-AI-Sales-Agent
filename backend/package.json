@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
+    "worker": "node src/worker.js",
     "seed": "node scripts/seed.js",
     "simulate": "node scripts/simulate.js",
     "lint": "eslint .",
