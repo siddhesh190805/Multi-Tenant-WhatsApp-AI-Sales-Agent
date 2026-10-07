@@ -10,20 +10,47 @@ This repository is intentionally independent from any other product or productio
 - **Queue:** Redis + BullMQ
 - **Worker:** Dedicated Node.js worker process with per-lead Redis locking
 - **AI service:** Python + FastAPI + LangGraph
-- **LLM:** Google Gemini via langchain-google-genai
+- **LLM:** Configurable Gemini or OpenAI-compatible provider via LangChain
 - **Frontend:** React + Vite
 - **WhatsApp:** local simulation + MongoDB mock sender
 - **Deployment target:** Docker Compose with separate API, worker, AI, frontend, MongoDB, and Redis services
 
 ## AI configuration
 
-The real agent uses **Gemini 3.8 Flash**, a current stable/GA Gemini model suited to low-latency agentic workloads.
+AI credentials and model selection are **runtime configuration**, not build-time configuration. The Docker image contains no API key. Edit `ai/.env`, then recreate the AI container; you do **not** need to rebuild the image.
 
-Copy `ai/.env.example` to `ai/.env` and provide:
+Supported runtime adapters:
 
-- `GEMINI_API_KEY`
-- `GEMINI_MODEL` (defaults to `gemini-3.8-flash`)
-- `LLM_MODE=real`
+- `AI_PROVIDER=gemini` — Google Gemini using `AI_API_KEY` and `AI_MODEL`.
+- `AI_PROVIDER=openai-compatible` — OpenAI-compatible APIs using `AI_API_KEY`, `AI_MODEL`, and `AI_BASE_URL`. This covers providers exposing the OpenAI Chat Completions-compatible protocol, such as OpenAI, OpenRouter, and Groq.
+
+Example:
+
+    copy ai/.env.example ai/.env
+    # edit ai/.env and set the provider/key/model/base URL
+    docker compose up -d --force-recreate ai
+
+For OpenAI:
+
+    AI_PROVIDER=openai-compatible
+    AI_API_KEY=<your-key>
+    AI_MODEL=<your-model>
+    AI_BASE_URL=https://api.openai.com/v1
+
+For OpenRouter:
+
+    AI_PROVIDER=openai-compatible
+    AI_API_KEY=<your-key>
+    AI_MODEL=<your-model>
+    AI_BASE_URL=https://openrouter.ai/api/v1
+
+For Gemini:
+
+    AI_PROVIDER=gemini
+    AI_API_KEY=<your-key>
+    AI_MODEL=gemini-3.8-flash
+
+Changing `AI_API_KEY` later only requires editing `ai/.env` and recreating the `ai` service. Changing the model/provider/base URL works the same way. No source-code change or Docker image rebuild is required.
 
 The API key is intentionally not included in this repository. For load testing without an external LLM, use `LLM_MODE=mock`.
 
