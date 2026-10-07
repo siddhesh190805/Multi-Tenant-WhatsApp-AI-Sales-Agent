@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+__pycache__/
+.venv/
+*.py[cod]
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Build / coverage
+dist/
+build/
+coverage/
+.vite/
+
+# Runtime / local data
+*.log
+logs/
+*.pid
+.tmp/
+temp/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+playwright-report/
+test-results/
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local Docker data
+.mongo/
+.redis/
+
+# Screenshots / generated demo artifacts
+artifacts/
