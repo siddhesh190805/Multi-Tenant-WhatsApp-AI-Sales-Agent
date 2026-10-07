@@ -10,6 +10,7 @@
     "worker": "node src/worker.js",
     "seed": "node scripts/seed.js",
     "simulate": "node scripts/simulate.js",
+    "load100": "node scripts/load100.js",
     "lint": "eslint .",
     "test": "node --test"
   },
@@ -22,7 +23,8 @@
     "ioredis": "^5.0.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.0",
-    "redis": "^5.0.0"
+    "redis": "^5.0.0",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

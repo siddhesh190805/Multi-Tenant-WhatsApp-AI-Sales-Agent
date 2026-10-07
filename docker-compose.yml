@@ -2,31 +2,25 @@ services:
   mongodb:
     image: mongo:8
     restart: unless-stopped
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
+    ports: ["27017:27017"]
+    volumes: [mongo_data:/data/db]
     healthcheck:
       test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok' localhost:27017/test"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
-
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    ports: ["6379:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
-
   ai:
-    build:
-      context: ./ai
+    build: { context: ./ai }
     restart: unless-stopped
     env_file:
       - path: ./ai/.env
@@ -35,18 +29,14 @@ services:
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
       LLM_MODE: ${LLM_MODE:-real}
       AI_PORT: 8000
-    ports:
-      - "8000:8000"
+    ports: ["8000:8000"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
       interval: 5s
       timeout: 5s
       retries: 10
-
   seed:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: { context: ./backend, dockerfile: Dockerfile }
     restart: "no"
     environment:
       NODE_ENV: production
@@ -55,13 +45,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-this-development-secret}
     command: ["node", "scripts/seed.js"]
     depends_on:
-      mongodb:
-        condition: service_healthy
-
+      mongodb: { condition: service_healthy }
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: { context: ./backend, dockerfile: Dockerfile }
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -71,28 +57,24 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-this-development-secret}
       AI_SERVICE_URL: http://ai:8000
       WHATSAPP_MODE: mock
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
       LLM_TIMEOUT_MS: 20000
-    ports:
-      - "4000:4000"
+      AI_DEBOUNCE_MS: 350
+      WORKER_CONCURRENCY: 20
+      TENANT_CONCURRENCY: 5
+    ports: ["4000:4000"]
     depends_on:
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      ai:
-        condition: service_healthy
-      seed:
-        condition: service_completed_successfully
+      mongodb: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      ai: { condition: service_healthy }
+      seed: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
       timeout: 5s
       retries: 10
-
   worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.worker
+    build: { context: ./backend, dockerfile: Dockerfile.worker }
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -101,26 +83,21 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-this-development-secret}
       AI_SERVICE_URL: http://ai:8000
       WHATSAPP_MODE: mock
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
       LLM_TIMEOUT_MS: 20000
+      AI_DEBOUNCE_MS: 350
+      WORKER_CONCURRENCY: 20
+      TENANT_CONCURRENCY: 5
     depends_on:
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      ai:
-        condition: service_healthy
-      seed:
-        condition: service_completed_successfully
-
+      mongodb: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      ai: { condition: service_healthy }
+      seed: { condition: service_completed_successfully }
   frontend:
-    build:
-      context: ./frontend
+    build: { context: ./frontend }
     restart: unless-stopped
-    ports:
-      - "3000:80"
+    ports: ["3000:80"]
     depends_on:
-      backend:
-        condition: service_healthy
-
+      backend: { condition: service_healthy }
 volumes:
   mongo_data:

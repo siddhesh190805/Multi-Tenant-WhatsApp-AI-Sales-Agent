@@ -58,8 +58,8 @@ async function testConcurrency() {
       await Lead.updateOne(
         { accountId: tenantIndex === 0 ? "acc_A" : "acc_B", phone: leadPhone },
         {
-          $set: { name: `Concurrent ${tenantIndex}-${index}`, lastMessageAt: new Date() },
-          $setOnInsert: { accountId: tenantIndex === 0 ? "acc_A" : "acc_B", phone: leadPhone, status: "new", humanTakeover: false },
+          $set: { name: `Concurrent ${tenantIndex}-${index}`, lastMessageAt: new Date(), humanTakeover: false },
+          $setOnInsert: { accountId: tenantIndex === 0 ? "acc_A" : "acc_B", phone: leadPhone, status: "new" },
         },
         { upsert: true },
       );
