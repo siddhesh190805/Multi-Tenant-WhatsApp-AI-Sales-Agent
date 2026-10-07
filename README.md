@@ -67,7 +67,20 @@ In a second terminal:
     npm install
     npm run dev
 
-Docker Compose will provide the complete multi-service topology once the container feature is finalized.
+Docker Compose starts MongoDB, Redis, the seed job, API, worker, AI service, and frontend. The seed job creates the required Sunrise Realty and FitZone Gym demo tenants/users before the API and worker start.
+
+For the Docker stack, run:
+
+    docker compose up --build
+
+Then open http://localhost:3000.
+
+### Demo credentials
+
+- Sunrise Realty: owner@sunrise.test / Sunrise@123
+- FitZone Gym: owner@fitzone.test / FitZone@123
+
+These are assessment demo credentials only; do not reuse them in production.
 
 ## Assessment source of truth
 
