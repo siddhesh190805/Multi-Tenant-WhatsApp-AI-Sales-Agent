@@ -2,7 +2,7 @@ import os
 from typing import TypedDict
 
 from fastapi import FastAPI, HTTPException
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
@@ -48,9 +48,9 @@ def _mock_response(state: AgentState) -> str:
 
 
 def _llm_response(state: AgentState) -> str:
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is required when LLM_MODE=real")
+        raise RuntimeError("GEMINI_API_KEY is required when LLM_MODE=real")
 
     tenant = state["tenant"]
     faq_text = "\n".join(
@@ -60,12 +60,12 @@ def _llm_response(state: AgentState) -> str:
         f"{message['sender']}: {message['text']}" for message in state["messages"]
     )
 
-    model = ChatOpenAI(
-        model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
-        temperature=0.2,
-        api_key=api_key,
+    model = ChatGoogleGenerativeAI(
+        model=os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
+        google_api_key=api_key,
         timeout=20,
         max_retries=0,
+        thinking_level="low",
     )
 
     system = f"""
@@ -89,9 +89,22 @@ SECURITY RULES:
 """
 
     response = model.invoke(
-        [("system", system), ("human", f"Conversation:\n{conversation}\n\nWrite the next assistant reply.")]
+        [
+            ("system", system),
+            ("human", f"Conversation:\n{conversation}\n\nWrite the next assistant reply."),
+        ]
     )
-    return response.content.strip()
+
+    content = response.content
+    if isinstance(content, str):
+        return content.strip()
+
+    text_parts = [
+        block.get("text", "")
+        for block in content
+        if isinstance(block, dict) and block.get("type") == "text"
+    ]
+    return "".join(text_parts).strip()
 
 
 def respond(state: AgentState) -> AgentState:
