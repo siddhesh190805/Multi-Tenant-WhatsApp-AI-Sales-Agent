@@ -8,7 +8,7 @@ const connection = createRedisConnection();
 const messageQueue = new Queue(MESSAGE_QUEUE_NAME, {
   connection,
   defaultJobOptions: {
-    attempts: 3,
+    attempts: 8,
     backoff: { type: "exponential", delay: 500 },
     removeOnComplete: { count: 1000 },
     removeOnFail: { count: 1000 },

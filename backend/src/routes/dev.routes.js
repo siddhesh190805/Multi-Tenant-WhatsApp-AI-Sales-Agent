@@ -2,6 +2,7 @@ const express = require("express");
 const crypto = require("node:crypto");
 const Tenant = require("../models/Tenant");
 const { requireAuth } = require("../middlewares/auth.middleware");
+const { getEnv } = require("../config/env");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -38,7 +39,7 @@ function makePayload({ phoneNumberId, leadPhone, leadName, text, msgId }) {
 
 router.post("/simulate-message", async (req, res, next) => {
   try {
-    if (process.env.NODE_ENV === "production") {
+    if (process.env.NODE_ENV === "production" && !getEnv().devSimulationEnabled) {
       return res.status(404).end();
     }
 
@@ -58,13 +59,14 @@ router.post("/simulate-message", async (req, res, next) => {
       msgId: `wamid.dev.${crypto.randomUUID()}`,
     });
 
+    const body = JSON.stringify(payload);
+    const headers = { "content-type": "application/json" };
+    if (getEnv().webhookSecret) {
+      headers["x-hub-signature-256"] = "sha256=" + crypto.createHmac("sha256", getEnv().webhookSecret).update(body).digest("hex");
+    }
     const response = await fetch(
       `http://127.0.0.1:${process.env.PORT || 4000}/webhook/whatsapp`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      },
+      { method: "POST", headers, body },
     );
 
     return res.status(202).json({ accepted: response.ok });

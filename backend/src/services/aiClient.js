@@ -25,6 +25,9 @@ async function generateReply(payload) {
     if (error.name === "AbortError") {
       error.retryable = true;
       error.code = "AI_TIMEOUT";
+    } else if (error instanceof TypeError) {
+      error.retryable = true;
+      error.code = "AI_NETWORK_ERROR";
     }
     throw error;
   } finally {

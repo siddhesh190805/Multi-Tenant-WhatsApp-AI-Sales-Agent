@@ -12,6 +12,8 @@ permissions:
 jobs:
   repository-hygiene:
     name: Repository hygiene
+    env:
+      JWT_SECRET: ci-only-secret
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,7 +21,9 @@ jobs:
       - name: Check for tracked environment files
         shell: bash
         run: |
-          if git ls-files | grep -E '(^|/)(\.env|\.env\.[^e])$'; then
+          tracked_env_files=$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -vE '(^|/)\.env\.example$' || true)
+          if [ -n "$tracked_env_files" ]; then
+            echo "$tracked_env_files"
             echo "Tracked environment file detected."
             exit 1
           fi
@@ -100,6 +104,9 @@ jobs:
 
   docker:
     name: Docker topology
+    env:
+      JWT_SECRET: ci-only-secret
+      WHATSAPP_APP_SECRET: ci-only-whatsapp-secret
     runs-on: ubuntu-latest
     needs:
       - repository-hygiene

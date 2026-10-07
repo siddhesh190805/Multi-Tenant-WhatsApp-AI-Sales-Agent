@@ -42,7 +42,8 @@ services:
       NODE_ENV: production
       MONGODB_URI: mongodb://mongodb:27017/whatsapp_ai_agent
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-change-this-development-secret}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:?WHATSAPP_APP_SECRET must be set}
     command: ["node", "scripts/seed.js"]
     depends_on:
       mongodb: { condition: service_healthy }
@@ -54,14 +55,15 @@ services:
       PORT: 4000
       MONGODB_URI: mongodb://mongodb:27017/whatsapp_ai_agent
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-change-this-development-secret}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       AI_SERVICE_URL: http://ai:8000
       WHATSAPP_MODE: mock
-      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:?WHATSAPP_APP_SECRET must be set}
       LLM_TIMEOUT_MS: 20000
       AI_DEBOUNCE_MS: 350
       WORKER_CONCURRENCY: 20
       TENANT_CONCURRENCY: 5
+      ENABLE_DEV_SIMULATION: "true"
     ports: ["4000:4000"]
     depends_on:
       mongodb: { condition: service_healthy }
@@ -80,14 +82,15 @@ services:
       NODE_ENV: production
       MONGODB_URI: mongodb://mongodb:27017/whatsapp_ai_agent
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-change-this-development-secret}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       AI_SERVICE_URL: http://ai:8000
       WHATSAPP_MODE: mock
-      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:?WHATSAPP_APP_SECRET must be set}
       LLM_TIMEOUT_MS: 20000
       AI_DEBOUNCE_MS: 350
       WORKER_CONCURRENCY: 20
       TENANT_CONCURRENCY: 5
+      ENABLE_DEV_SIMULATION: "true"
     depends_on:
       mongodb: { condition: service_healthy }
       redis: { condition: service_healthy }

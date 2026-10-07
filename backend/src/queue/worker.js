@@ -15,15 +15,33 @@ const { getEnv } = require("../config/env");
 function buildAgentPayload({ tenant, messages }) {
   return { tenant: { businessName: tenant.businessName, tone: tenant.tone, language: tenant.language, pricing: tenant.pricing, faqs: tenant.faqs }, messages: messages.map((message) => ({ direction: message.direction, sender: message.sender, text: message.text })) };
 }
+async function waitForPriorReply(accountId, leadId, sequence) {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const pending = await Message.aggregate([
+      { $match: { accountId, leadId, direction: "in", sequence: { $lt: sequence } } },
+      { $lookup: { from: "messages", let: { seq: "$sequence" }, pipeline: [{ $match: { accountId, leadId, direction: "out" } }, { $match: { $expr: { $eq: ["$sequence", "$$seq"] } } }, { $limit: 1 }], as: "replies" } },
+      { $match: { replies: { $size: 0 } } },
+      { $limit: 1 },
+    ]);
+    if (pending.length === 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  const error = new Error("Timed out waiting for an earlier message reply");
+  error.retryable = true;
+  throw error;
+}
+
 async function processMessage(job) {
   const { accountId, leadId, messageId, phoneNumberId, receivedAt } = job.data;
+  const currentMessage = await Message.findOne({ accountId, leadId, waMessageId: messageId, direction: "in" }).lean();
+  if (!currentMessage) throw new Error("Inbound message not found: " + messageId);
+  await waitForPriorReply(accountId, leadId, currentMessage.sequence);
   const lock = await acquireLeadLock(leadId);
   const tenantSlot = await acquireTenantSlot(accountId);
   try {
     const lead = await Lead.findOne({ _id: leadId, accountId });
     if (!lead || lead.humanTakeover) return;
-    const currentMessage = await Message.findOne({ accountId, leadId, waMessageId: messageId, direction: "in" }).lean();
-    if (!currentMessage) throw new Error("Inbound message not found: " + messageId);
     if (getEnv().debounceEnabled) {
       await new Promise((resolve) => setTimeout(resolve, getEnv().debounceMs));
       const latestInbound = await Message.findOne({ accountId, leadId, direction: "in" }).sort({ sequence: -1 }).lean();
@@ -35,8 +53,11 @@ async function processMessage(job) {
     messages.reverse();
     const startedAt = Date.now();
     let result;
+    let text;
     try {
       result = await withExponentialBackoff(() => generateReply(buildAgentPayload({ tenant, messages })), { attempts: 3 });
+      text = String(result.response || "").trim();
+      if (!text) throw new Error("AI service returned an empty response");
     } catch (error) {
       const fallback = "Thanks for your message! A team member will take over shortly.";
       await Lead.updateOne({ _id: lead._id, accountId }, { $set: { humanTakeover: true } });
@@ -47,8 +68,8 @@ async function processMessage(job) {
       console.error("[AI AUTO-HANDOFF] accountId=" + accountId + " leadId=" + leadId + " waMessageId=" + messageId, error);
       return;
     }
-    const text = String(result.response || "").trim();
-    if (!text) throw new Error("AI service returned an empty response");
+    const latestLead = await Lead.findOne({ _id: leadId, accountId }).lean();
+    if (!latestLead || latestLead.humanTakeover) return;
     const latencyMs = Date.now() - new Date(receivedAt).getTime();
     await Message.create({ accountId, leadId, waMessageId: "ai:" + messageId, direction: "out", sender: "ai", text, sequence: currentMessage.sequence, latencyMs, tokenUsage: result.tokenUsage || undefined });
     await sendWhatsAppMessage({ accountId, phoneNumberId, to: lead.phone, text, replyToWaMessageId: messageId });

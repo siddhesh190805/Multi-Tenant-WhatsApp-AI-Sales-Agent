@@ -69,9 +69,13 @@ In a second terminal:
 
 Docker Compose starts MongoDB, Redis, the seed job, API, worker, AI service, and frontend. The seed job creates the required Sunrise Realty and FitZone Gym demo tenants/users before the API and worker start.
 
-For the Docker stack, run:
+For the Docker stack, set the required secrets first (never commit them), then run:
 
+    $env:JWT_SECRET="replace-with-a-long-random-secret"
+    $env:WHATSAPP_APP_SECRET="replace-with-your-whatsapp-app-secret"
     docker compose up --build
+
+The Compose demo explicitly enables the authenticated developer simulation panel so the dashboard remains usable locally. Keep `ENABLE_DEV_SIMULATION=false` for a real production deployment.
 
 Then open http://localhost:3000.
 

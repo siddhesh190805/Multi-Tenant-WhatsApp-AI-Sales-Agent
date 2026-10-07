@@ -1,4 +1,5 @@
 require("dotenv").config();
+const crypto = require("node:crypto");
 const { connectDatabase, disconnectDatabase } = require("../src/config/database");
 const Message = require("../src/models/Message");
 const Lead = require("../src/models/Lead");
@@ -9,7 +10,12 @@ const RUN = Date.now().toString(36);
 
 async function send(payload) {
   const start = Date.now();
-  const response = await fetch(URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+  const body = JSON.stringify(payload);
+  const headers = { "content-type": "application/json" };
+  if (process.env.WHATSAPP_APP_SECRET) {
+    headers["x-hub-signature-256"] = "sha256=" + crypto.createHmac("sha256", process.env.WHATSAPP_APP_SECRET).update(body).digest("hex");
+  }
+  const response = await fetch(URL, { method: "POST", headers, body });
   return { status: response.status, ms: Date.now() - start };
 }
 async function main() {

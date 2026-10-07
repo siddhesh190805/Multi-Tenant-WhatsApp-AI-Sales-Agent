@@ -25,36 +25,93 @@ async function findTenantByPhoneNumberId(phoneNumberId) {
 router.post("/whatsapp", verifyWhatsAppSignature, async (req, res, next) => {
   const receivedAt = new Date();
   try {
-    const value = req.body?.entry?.[0]?.changes?.[0]?.value;
-    const message = value?.messages?.[0];
-    if (!value || !message || message.type !== "text") return res.status(200).json({ received: true });
+    const jobs = [];
 
-    const phoneNumberId = value.metadata?.phone_number_id;
-    const tenant = await findTenantByPhoneNumberId(phoneNumberId);
-    if (!tenant) return res.status(200).json({ received: true });
+    for (const entry of req.body?.entry || []) {
+      for (const change of entry?.changes || []) {
+        const value = change?.value;
+        if (!value?.messages) continue;
 
-    const leadPhone = message.from;
-    const leadName = value.contacts?.[0]?.profile?.name || leadPhone;
-    const duplicate = await Message.findOne({ accountId: tenant.accountId, waMessageId: message.id }).select("_id").lean();
-    if (duplicate) return res.status(200).json({ received: true, duplicate: true });
+        const phoneNumberId = value.metadata?.phone_number_id;
+        const tenant = await findTenantByPhoneNumberId(phoneNumberId);
+        if (!tenant) continue;
 
-    const lead = await Lead.findOneAndUpdate(
-      { accountId: tenant.accountId, phone: leadPhone },
-      { $set: { name: leadName, lastMessageAt: receivedAt }, $inc: { messageSequence: 1 }, $setOnInsert: { accountId: tenant.accountId, phone: leadPhone, status: "new", humanTakeover: false } },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
-    );
+        for (const message of value.messages) {
+          if (message?.type !== "text" || !message.id || !message.from) continue;
 
-    try {
-      await Message.create({ accountId: tenant.accountId, leadId: lead._id, waMessageId: message.id, direction: "in", sender: "lead", text: message.text.body, sequence: lead.messageSequence, createdAt: receivedAt });
-    } catch (error) {
-      if (error?.code === 11000) return res.status(200).json({ received: true, duplicate: true });
-      throw error;
+          const leadPhone = message.from;
+          const leadName = value.contacts?.find((contact) => contact.wa_id === leadPhone)?.profile?.name || value.contacts?.[0]?.profile?.name || leadPhone;
+          const duplicate = await Message.findOne({ accountId: tenant.accountId, waMessageId: message.id }).select("leadId").lean();
+
+          if (duplicate) {
+            const existingLead = await Lead.findOne({ _id: duplicate.leadId, accountId: tenant.accountId }).lean();
+            if (existingLead) {
+              jobs.push({
+                accountId: tenant.accountId,
+                leadId: String(existingLead._id),
+                messageId: message.id,
+                phoneNumberId,
+                receivedAt: receivedAt.toISOString(),
+                debounceMs: getEnv().debounceMs,
+              });
+            }
+            continue;
+          }
+
+          const lead = await Lead.findOneAndUpdate(
+            { accountId: tenant.accountId, phone: leadPhone },
+            {
+              $set: { name: leadName, lastMessageAt: receivedAt },
+              $inc: { messageSequence: 1 },
+              $setOnInsert: { accountId: tenant.accountId, phone: leadPhone, status: "new", humanTakeover: false },
+            },
+            { upsert: true, new: true, setDefaultsOnInsert: true },
+          );
+
+          try {
+            await Message.create({
+              accountId: tenant.accountId,
+              leadId: lead._id,
+              waMessageId: message.id,
+              direction: "in",
+              sender: "lead",
+              text: message.text.body,
+              sequence: lead.messageSequence,
+              createdAt: receivedAt,
+            });
+          } catch (error) {
+            if (error?.code === 11000) {
+              jobs.push({
+                accountId: tenant.accountId,
+                leadId: String(lead._id),
+                messageId: message.id,
+                phoneNumberId,
+                receivedAt: receivedAt.toISOString(),
+                debounceMs: getEnv().debounceMs,
+              });
+              continue;
+            }
+            throw error;
+          }
+
+          jobs.push({
+            accountId: tenant.accountId,
+            leadId: String(lead._id),
+            messageId: message.id,
+            phoneNumberId,
+            receivedAt: receivedAt.toISOString(),
+            debounceMs: getEnv().debounceMs,
+          });
+          console.log("[WEBHOOK] accountId=" + tenant.accountId + " leadId=" + lead._id + " waMessageId=" + message.id);
+        }
+      }
     }
 
-    const jobData = { accountId: tenant.accountId, leadId: String(lead._id), messageId: message.id, phoneNumberId, receivedAt: receivedAt.toISOString(), debounceMs: getEnv().debounceMs };
-    res.status(200).json({ received: true });
-    enqueueMessage(jobData).catch((error) => console.error("[WEBHOOK QUEUE ERROR]", error));
-    console.log("[WEBHOOK] accountId=" + tenant.accountId + " leadId=" + lead._id + " waMessageId=" + message.id);
-  } catch (error) { return next(error); }
+    await Promise.all(jobs.map((job) => enqueueMessage(job)));
+    return res.status(200).json({ received: true, queued: jobs.length });
+  } catch (error) {
+    console.error("[WEBHOOK ERROR]", error);
+    return next(error);
+  }
 });
 module.exports = router;

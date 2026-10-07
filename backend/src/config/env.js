@@ -1,4 +1,4 @@
-const requiredInProduction = ["MONGODB_URI", "REDIS_URL", "JWT_SECRET"];
+const requiredInProduction = ["MONGODB_URI", "REDIS_URL", "JWT_SECRET", "WHATSAPP_APP_SECRET"];
 
 function getEnv() {
   const env = process.env.NODE_ENV || "development";
@@ -20,6 +20,7 @@ function getEnv() {
     debounceMs: Number(process.env.AI_DEBOUNCE_MS || 350),
     debounceEnabled: String(process.env.AI_DEBOUNCE_ENABLED || "false").trim().toLowerCase() === "true",
     maxWorkerConcurrency: Number(process.env.WORKER_CONCURRENCY || 20),
+    devSimulationEnabled: String(process.env.ENABLE_DEV_SIMULATION || "false").trim().toLowerCase() === "true",
   };
 }
 module.exports = { getEnv };

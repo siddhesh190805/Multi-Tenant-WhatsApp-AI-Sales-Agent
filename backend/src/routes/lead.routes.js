@@ -6,6 +6,7 @@ const Tenant = require("../models/Tenant");
 const { requireAuth } = require("../middlewares/auth.middleware");
 const { sendWhatsAppMessage } = require("../services/whatsappSender");
 const { publishEvent } = require("../services/eventBus");
+const { acquireLeadLock, releaseLeadLock } = require("../queue/leadLock");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -36,10 +37,16 @@ router.get("/:leadId/messages", async (req, res, next) => {
 
 router.patch("/:leadId/takeover", async (req, res, next) => {
   try {
-    const enabled = Boolean(req.body?.enabled);
-    const lead = await Lead.findOneAndUpdate({ _id: req.params.leadId, accountId: req.accountId }, { $set: { humanTakeover: enabled } }, { new: true }).lean();
-    if (!lead) return res.status(404).json({ error: "Lead not found" });
-    return res.json({ id: String(lead._id), humanTakeover: lead.humanTakeover });
+    if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ error: "enabled must be a boolean" });
+    const enabled = req.body.enabled;
+    const lock = await acquireLeadLock(req.params.leadId);
+    try {
+      const lead = await Lead.findOneAndUpdate({ _id: req.params.leadId, accountId: req.accountId }, { $set: { humanTakeover: enabled } }, { new: true }).lean();
+      if (!lead) return res.status(404).json({ error: "Lead not found" });
+      return res.json({ id: String(lead._id), humanTakeover: lead.humanTakeover });
+    } finally {
+      await releaseLeadLock(lock);
+    }
   } catch (error) { return next(error); }
 });
 
