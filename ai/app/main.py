@@ -27,28 +27,38 @@ class GenerateRequest(BaseModel):
 
 
 class AgentState(TypedDict):
-    tenant: TenantContext
-    messages: list[Message]
+    tenant: dict
+    messages: list[dict]
     response: str
 
 
 def _mock_response(state: AgentState) -> str:
-    latest = state["messages"][-1].text.lower()
-    history = " ".join(message.text for message in state["messages"])
+    latest = state["messages"][-1]["text"].lower()
+    history = " ".join(message["text"] for message in state["messages"])
+    pricing = state["tenant"]["pricing"]
+    business_name = state["tenant"]["businessName"]
 
     if "naam kya hai" in latest and "amit" in history.lower():
         return "Aapka naam Amit hai."
-    if "2bhk" in latest and "45 lakh" in state["tenant"].pricing.lower():
+    if "2bhk" in latest and "45 lakh" in pricing.lower():
         return "2BHK flats start at Rs 45 lakh. Would you like to book a site visit?"
     if "price" in latest or "pricing" in latest:
-        return state["tenant"].pricing
-    return f"Thanks for contacting {state['tenant'].businessName}. How can I help you today?"
+        return pricing
+    return f"Thanks for contacting {business_name}. How can I help you today?"
 
 
 def _llm_response(state: AgentState) -> str:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is required when LLM_MODE=real")
+
+    tenant = state["tenant"]
+    faq_text = "\n".join(
+        f"- {faq['q']}: {faq['a']}" for faq in tenant["faqs"]
+    )
+    conversation = "\n".join(
+        f"{message['sender']}: {message['text']}" for message in state["messages"]
+    )
 
     model = ChatOpenAI(
         model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
@@ -58,20 +68,14 @@ def _llm_response(state: AgentState) -> str:
         max_retries=0,
     )
 
-    tenant = state["tenant"]
-    faq_text = "\n".join(f"- {faq['q']}: {faq['a']}" for faq in tenant.faqs)
-    conversation = "\n".join(
-        f"{message.sender}: {message.text}" for message in state["messages"]
-    )
-
     system = f"""
-You are the sales assistant for exactly one business: {tenant.businessName}.
+You are the sales assistant for exactly one business: {tenant["businessName"]}.
 
 TENANT DATA — the only business information you may use:
-Business: {tenant.businessName}
-Tone: {tenant.tone}
-Language rule: {tenant.language}
-Pricing: {tenant.pricing}
+Business: {tenant["businessName"]}
+Tone: {tenant["tone"]}
+Language rule: {tenant["language"]}
+Pricing: {tenant["pricing"]}
 FAQs:
 {faq_text}
 
@@ -84,8 +88,9 @@ SECURITY RULES:
 - Follow the customer's language: English, Hindi, or Hinglish.
 """
 
-    prompt = f"Conversation:\n{conversation}\n\nWrite the next assistant reply."
-    response = model.invoke([("system", system), ("human", prompt)])
+    response = model.invoke(
+        [("system", system), ("human", f"Conversation:\n{conversation}\n\nWrite the next assistant reply.")]
+    )
     return response.content.strip()
 
 
@@ -115,13 +120,11 @@ def health():
 @app.post("/generate")
 def generate(request: GenerateRequest):
     try:
-        result = graph.invoke(
-            {
-                "tenant": request.tenant,
-                "messages": request.messages,
-                "response": "",
-            }
-        )
+        result = graph.invoke({
+            "tenant": request.tenant.model_dump(),
+            "messages": [message.model_dump() for message in request.messages],
+            "response": "",
+        })
         return {"response": result["response"]}
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
