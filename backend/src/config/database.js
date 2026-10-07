@@ -3,7 +3,10 @@ const { getEnv } = require("./env");
 
 async function connectDatabase() {
   const { mongodbUri } = getEnv();
-  await mongoose.connect(mongodbUri);
+  await mongoose.connect(mongodbUri, {
+    minPoolSize: 20,
+    maxPoolSize: 50,
+  });
 }
 
 async function disconnectDatabase() {

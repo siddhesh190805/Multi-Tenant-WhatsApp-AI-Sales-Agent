@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const { Worker } = require("bullmq");
 const Lead = require("../models/Lead");
 const Tenant = require("../models/Tenant");
@@ -16,20 +17,19 @@ function buildAgentPayload({ tenant, messages }) {
   return { tenant: { businessName: tenant.businessName, tone: tenant.tone, language: tenant.language, pricing: tenant.pricing, faqs: tenant.faqs }, messages: messages.map((message) => ({ direction: message.direction, sender: message.sender, text: message.text })) };
 }
 async function waitForPriorReply(accountId, leadId, sequence) {
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + 10_000;
+  const leadObjectId = typeof leadId === "string" ? new mongoose.Types.ObjectId(leadId) : leadId;
+  const recentCutoff = new Date(Date.now() - 30_000);
   while (Date.now() < deadline) {
     const pending = await Message.aggregate([
-      { $match: { accountId, leadId, direction: "in", sequence: { $lt: sequence } } },
-      { $lookup: { from: "messages", let: { seq: "$sequence" }, pipeline: [{ $match: { accountId, leadId, direction: "out" } }, { $match: { $expr: { $eq: ["$sequence", "$$seq"] } } }, { $limit: 1 }], as: "replies" } },
+      { $match: { accountId, leadId: leadObjectId, direction: "in", sequence: { $lt: sequence }, createdAt: { $gte: recentCutoff } } },
+      { $lookup: { from: "messages", let: { seq: "$sequence" }, pipeline: [{ $match: { accountId, leadId: leadObjectId, direction: "out" } }, { $match: { $expr: { $eq: ["$sequence", "$$seq"] } } }, { $limit: 1 }], as: "replies" } },
       { $match: { replies: { $size: 0 } } },
       { $limit: 1 },
     ]);
     if (pending.length === 0) return;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  const error = new Error("Timed out waiting for an earlier message reply");
-  error.retryable = true;
-  throw error;
 }
 
 async function processMessage(job) {

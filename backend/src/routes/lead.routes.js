@@ -1,5 +1,6 @@
 const express = require("express");
 const crypto = require("crypto");
+const mongoose = require("mongoose");
 const Lead = require("../models/Lead");
 const Message = require("../models/Message");
 const Tenant = require("../models/Tenant");
@@ -28,6 +29,9 @@ router.get("/", async (req, res, next) => {
 
 router.get("/:leadId/messages", async (req, res, next) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.leadId)) {
+      return res.status(404).json({ error: "Lead not found" });
+    }
     const lead = await Lead.findOne({ _id: req.params.leadId, accountId: req.accountId }).lean();
     if (!lead) return res.status(404).json({ error: "Lead not found" });
     const messages = await Message.find({ accountId: req.accountId, leadId: lead._id }).sort({ createdAt: 1 }).lean();
@@ -38,6 +42,9 @@ router.get("/:leadId/messages", async (req, res, next) => {
 router.patch("/:leadId/takeover", async (req, res, next) => {
   try {
     if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ error: "enabled must be a boolean" });
+    if (!mongoose.Types.ObjectId.isValid(req.params.leadId)) {
+      return res.status(404).json({ error: "Lead not found" });
+    }
     const enabled = req.body.enabled;
     const lock = await acquireLeadLock(req.params.leadId);
     try {
@@ -54,6 +61,9 @@ router.post("/:leadId/messages", async (req, res, next) => {
   try {
     const text = String(req.body?.text || "").trim();
     if (!text) return res.status(400).json({ error: "Message text is required" });
+    if (!mongoose.Types.ObjectId.isValid(req.params.leadId)) {
+      return res.status(404).json({ error: "Lead not found" });
+    }
     const lead = await Lead.findOne({ _id: req.params.leadId, accountId: req.accountId });
     if (!lead) return res.status(404).json({ error: "Lead not found" });
     const sequence = (lead.messageSequence || 0) + 1;

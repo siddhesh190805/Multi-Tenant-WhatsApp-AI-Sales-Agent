@@ -38,8 +38,8 @@ services:
       NODE_ENV: production
       MONGODB_URI: mongodb://mongodb:27017/whatsapp_ai_agent
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
-      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:?WHATSAPP_APP_SECRET must be set}
+      JWT_SECRET: ${JWT_SECRET:-local-assessment-jwt-secret}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-local-webhook-test}
     command: ["node", "scripts/seed.js"]
     depends_on:
       mongodb: { condition: service_healthy }
@@ -51,10 +51,10 @@ services:
       PORT: 4000
       MONGODB_URI: mongodb://mongodb:27017/whatsapp_ai_agent
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      JWT_SECRET: ${JWT_SECRET:-local-assessment-jwt-secret}
       AI_SERVICE_URL: http://ai:8000
       WHATSAPP_MODE: ${WHATSAPP_MODE:-mock}
-      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:?WHATSAPP_APP_SECRET must be set}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-local-webhook-test}
       WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
       WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
       WHATSAPP_GRAPH_VERSION: ${WHATSAPP_GRAPH_VERSION:-v21.0}
@@ -82,10 +82,10 @@ services:
       NODE_ENV: production
       MONGODB_URI: mongodb://mongodb:27017/whatsapp_ai_agent
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      JWT_SECRET: ${JWT_SECRET:-local-assessment-jwt-secret}
       AI_SERVICE_URL: http://ai:8000
       WHATSAPP_MODE: ${WHATSAPP_MODE:-mock}
-      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:?WHATSAPP_APP_SECRET must be set}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-local-webhook-test}
       WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
       WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
       WHATSAPP_GRAPH_VERSION: ${WHATSAPP_GRAPH_VERSION:-v21.0}
