@@ -28,10 +28,12 @@ services:
     build:
       context: ./ai
     restart: unless-stopped
+    env_file:
+      - path: ./ai/.env
+        required: false
     environment:
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
-      LLM_MODE: ${LLM_MODE:-mock}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+      LLM_MODE: ${LLM_MODE:-real}
       AI_PORT: 8000
     ports:
       - "8000:8000"
