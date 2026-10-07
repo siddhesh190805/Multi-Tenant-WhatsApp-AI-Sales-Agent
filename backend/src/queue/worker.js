@@ -42,8 +42,20 @@ async function processMessage(job) {
     const tenant = await Tenant.findOne({ accountId });
     if (!tenant) throw new Error(`Tenant not found: ${accountId}`);
 
-    const messages = await Message.find({ accountId, leadId })
-      .sort({ createdAt: -1 })
+    const currentMessage = await Message.findOne({
+      accountId,
+      leadId,
+      waMessageId: messageId,
+      direction: "in",
+    }).lean();
+    if (!currentMessage) throw new Error(`Inbound message not found: ${messageId}`);
+
+    const messages = await Message.find({
+      accountId,
+      leadId,
+      sequence: { $lte: currentMessage.sequence },
+    })
+      .sort({ sequence: -1, createdAt: -1 })
       .limit(10)
       .lean();
 
@@ -68,6 +80,7 @@ async function processMessage(job) {
         direction: "out",
         sender: "fallback",
         text: fallback,
+        sequence: currentMessage.sequence,
         latencyMs,
       });
 
@@ -98,6 +111,7 @@ async function processMessage(job) {
       direction: "out",
       sender: "ai",
       text,
+      sequence: currentMessage.sequence,
       latencyMs,
     });
 

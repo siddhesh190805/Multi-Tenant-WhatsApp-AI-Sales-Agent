@@ -28,10 +28,20 @@ router.post("/whatsapp", async (req, res, next) => {
     const leadPhone = message.from;
     const leadName = value.contacts?.[0]?.profile?.name || leadPhone;
 
+    const duplicate = await Message.findOne({
+      accountId: tenant.accountId,
+      waMessageId: message.id,
+    }).select("_id").lean();
+
+    if (duplicate) {
+      return res.status(200).json({ received: true, duplicate: true });
+    }
+
     const lead = await Lead.findOneAndUpdate(
       { accountId: tenant.accountId, phone: leadPhone },
       {
         $set: { name: leadName, lastMessageAt: receivedAt },
+        $inc: { messageSequence: 1 },
         $setOnInsert: {
           accountId: tenant.accountId,
           phone: leadPhone,
@@ -50,6 +60,7 @@ router.post("/whatsapp", async (req, res, next) => {
         direction: "in",
         sender: "lead",
         text: message.text.body,
+        sequence: lead.messageSequence,
         createdAt: receivedAt,
       });
     } catch (error) {

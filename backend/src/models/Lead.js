@@ -7,6 +7,7 @@ const leadSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     status: { type: String, default: "new" },
     humanTakeover: { type: Boolean, default: false },
+    messageSequence: { type: Number, default: 0 },
     lastMessageAt: { type: Date, default: Date.now, index: true },
   },
   { timestamps: true },

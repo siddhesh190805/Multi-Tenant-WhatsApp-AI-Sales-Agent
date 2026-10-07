@@ -8,6 +8,7 @@ const messageSchema = new mongoose.Schema(
     direction: { type: String, enum: ["in", "out"], required: true },
     sender: { type: String, enum: ["lead", "ai", "fallback", "human"], required: true },
     text: { type: String, required: true },
+    sequence: { type: Number, default: 0, index: true },
     latencyMs: { type: Number, default: null },
     createdAt: { type: Date, default: Date.now, index: true },
   },
