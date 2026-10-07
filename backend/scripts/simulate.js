@@ -34,6 +34,10 @@ async function waitForReplies(expected, predicate, timeoutMs = 60_000) {
   }
 
   throw new Error(`Timed out waiting for ${expected} replies`);
+}`n`nconst RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+function runScopedWaId(prefix, suffix = "") {
+  return `wamid.${prefix}.${RUN_ID}${suffix ? `.${suffix}` : ""}`;
 }
 
 function assert(condition, message) {
@@ -49,6 +53,14 @@ async function testConcurrency() {
 
     for (let index = 0; index < 10; index += 1) {
       const leadPhone = `91980000${tenantIndex}${String(index).padStart(3, "0")}`;
+      await Lead.updateOne(
+        { accountId: tenantIndex === 0 ? "acc_A" : "acc_B", phone: leadPhone },
+        {
+          $set: { name: `Concurrent ${tenantIndex}-${index}`, lastMessageAt: new Date() },
+          $setOnInsert: { accountId: tenantIndex === 0 ? "acc_A" : "acc_B", phone: leadPhone, status: "new", humanTakeover: false },
+        },
+        { upsert: true },
+      );
       requests.push(
         send(
           makeMessage({
@@ -56,7 +68,7 @@ async function testConcurrency() {
             leadPhone,
             leadName: `Concurrent ${tenantIndex}-${index}`,
             text: "Hi, what is the price?",
-            msgId: `wamid.concurrent.${tenantIndex}.${index}.${Date.now()}`,
+            msgId: runScopedWaId("concurrent", `${tenantIndex}.${index}`),
           }),
         ),
       );
@@ -66,12 +78,12 @@ async function testConcurrency() {
   const responses = await Promise.all(requests);
   webhookTimes.push(...responses.map((response) => response.ms));
 
-  await waitForReplies(20);
+  await waitForReplies(20, { "waMessageId": { $regex: new RegExp(`^ai:wamid\\.concurrent\\.${RUN_ID}\\.`) } });
 
   return {
     replies: await Message.countDocuments({
       sender: "ai",
-      "waMessageId": { $regex: /^ai:wamid\.concurrent\./ },
+      "waMessageId": { $regex: new RegExp(`^ai:wamid\\.concurrent\\.${RUN_ID}\\.`) },
     }),
     maxWebhookMs: Math.max(...webhookTimes),
     avgWebhookMs:
@@ -80,7 +92,7 @@ async function testConcurrency() {
 }
 
 async function testDuplicate() {
-  const msgId = `wamid.dup.${Date.now()}`;
+  const msgId = runScopedWaId("dup");
   const payload = makeMessage({
     phoneNumberId: "PHONE_TENANT_A",
     leadPhone: "919811111111",
@@ -102,12 +114,12 @@ async function testDuplicate() {
 }
 
 async function testOrderAndMemory() {
-  const phone = "919822222222";
+  const phone = `9198${String(Date.now()).slice(-6)}`;
 
   const messages = [
-    ["Hi", "wamid.order.1"],
-    ["Mera naam Amit hai", "wamid.order.2"],
-    ["Mera naam kya hai?", "wamid.order.3"],
+    ["Hi", runScopedWaId("order", "1")],
+    ["Mera naam Amit hai", runScopedWaId("order", "2")],
+    ["Mera naam kya hai?", runScopedWaId("order", "3")],
   ];
 
   for (const [text, id] of messages) {
@@ -117,7 +129,7 @@ async function testOrderAndMemory() {
         leadPhone: phone,
         leadName: "Amit",
         text,
-        msgId: `${id}.${Date.now()}`,
+        msgId: id,
       }),
     );
     assert(response.status === 200, `Webhook failed for order test: ${response.status}`);
@@ -127,6 +139,7 @@ async function testOrderAndMemory() {
   assert(lead, "Order test lead was not created");
 
   const incomingIds = messages.map(([_text, id]) => `^${id}`);
+  const expectedReplyIds = messages.map(([_text, id]) => `ai:${id}`);
   const deadline = Date.now() + 60_000;
   let replies = [];
 
@@ -135,11 +148,12 @@ async function testOrderAndMemory() {
       accountId: "acc_A",
       leadId: lead._id,
       sender: "ai",
+      waMessageId: { $in: expectedReplyIds },
     })
-      .sort({ createdAt: 1 })
+      .sort({ sequence: 1 })
       .lean();
 
-    if (replies.length >= 3) break;
+    if (replies.length === 3) break;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
@@ -152,8 +166,8 @@ async function testOrderAndMemory() {
     .sort({ createdAt: 1 })
     .lean();
 
-  const inbound = allMessages.filter((message) => message.sender === "lead").slice(-3);
-  const outbound = replies.slice(-3);
+  const inbound = allMessages.filter((message) => expectedReplyIds.map((id) => id.slice(3)).includes(message.waMessageId));
+  const outbound = replies;
 
   assert(
     inbound.every((message, index) => message.waMessageId.startsWith(incomingIds[index].replace("^", ""))),
@@ -172,8 +186,8 @@ async function testOrderAndMemory() {
 }
 
 async function testTenantIsolation() {
-  const msgId = `wamid.isolation.${Date.now()}`;
-  const phone = "919833333333";
+  const msgId = runScopedWaId("isolation");
+  const phone = `9197${String(Date.now()).slice(-6)}`;
 
   await send(
     makeMessage({
@@ -205,6 +219,7 @@ async function run() {
   const results = {};
 
   results.concurrency = await testConcurrency();
+  console.log("Test 1 timing: max=" + results.concurrency.maxWebhookMs.toFixed(0) + "ms avg=" + results.concurrency.avgWebhookMs.toFixed(0) + "ms");
   assert(results.concurrency.replies === 20, "Concurrency test did not produce 20 replies");
   assert(results.concurrency.maxWebhookMs < 200, "At least one webhook exceeded 200ms");
 
