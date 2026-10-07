@@ -1,11 +1,27 @@
 const express = require("express");
+const cookieParser = require("cookie-parser");
+const authRoutes = require("./routes/auth.routes");
+const leadRoutes = require("./routes/lead.routes");
+const webhookRoutes = require("./routes/webhook.routes");
+const { router: devRoutes } = require("./routes/dev.routes");
 
 const app = express();
 
 app.use(express.json({ limit: "1mb" }));
+app.use(cookieParser());
 
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
+});
+
+app.use("/api/auth", authRoutes);
+app.use("/api/leads", leadRoutes);
+app.use("/api/dev", devRoutes);
+app.use("/webhook", webhookRoutes);
+
+app.use((error, _req, res, _next) => {
+  console.error("[HTTP ERROR]", error);
+  res.status(500).json({ error: "Internal server error" });
 });
 
 module.exports = app;
