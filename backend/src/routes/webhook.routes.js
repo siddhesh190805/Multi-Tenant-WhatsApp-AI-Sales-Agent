@@ -6,6 +6,9 @@ const { enqueueMessage } = require("../queue/queue");
 const { getEnv } = require("../config/env");
 const { verifyWhatsAppSignature } = require("../middlewares/webhookSignature.middleware");
 
+const { createRedisConnection } = require("../queue/connection");
+const redis = createRedisConnection();
+
 const router = express.Router();
 const TENANT_CACHE_TTL_MS = 30_000;
 const tenantCache = new Map();
@@ -47,27 +50,20 @@ router.post("/whatsapp", verifyWhatsAppSignature, async (req, res, next) => {
 
         const phoneNumberId = value.metadata?.phone_number_id;
         const tenant = await findTenantByPhoneNumberId(phoneNumberId);
-        if (!tenant) continue;
+        if (!tenant) {
+          console.warn(`[WEBHOOK] No tenant found for phone_number_id=${phoneNumberId}`);
+          continue;
+        }
 
         for (const message of value.messages) {
           if (message?.type !== "text" || !message.id || !message.from) continue;
 
           const leadPhone = message.from;
           const leadName = value.contacts?.find((contact) => contact.wa_id === leadPhone)?.profile?.name || value.contacts?.[0]?.profile?.name || leadPhone;
-          const duplicate = await Message.findOne({ accountId: tenant.accountId, waMessageId: message.id }).select("leadId").lean();
+          const isNew = await redis.set(`dedup:${tenant.accountId}:${message.id}`, "1", "NX", "EX", 86400);
 
-          if (duplicate) {
-            const existingLead = await Lead.findOne({ _id: duplicate.leadId, accountId: tenant.accountId }).lean();
-            if (existingLead) {
-              jobs.push({
-                accountId: tenant.accountId,
-                leadId: String(existingLead._id),
-                messageId: message.id,
-                phoneNumberId,
-                receivedAt: receivedAt.toISOString(),
-                debounceMs: getEnv().debounceMs,
-              });
-            }
+          if (!isNew) {
+            console.log(`[WEBHOOK IGNORE DUPLICATE] accountId=${tenant.accountId} waMessageId=${message.id}`);
             continue;
           }
 
@@ -94,14 +90,7 @@ router.post("/whatsapp", verifyWhatsAppSignature, async (req, res, next) => {
             });
           } catch (error) {
             if (error?.code === 11000) {
-              jobs.push({
-                accountId: tenant.accountId,
-                leadId: String(lead._id),
-                messageId: message.id,
-                phoneNumberId,
-                receivedAt: receivedAt.toISOString(),
-                debounceMs: getEnv().debounceMs,
-              });
+              console.log(`[WEBHOOK CONCURRENT DUPLICATE] accountId=${tenant.accountId} waMessageId=${message.id}`);
               continue;
             }
             throw error;
@@ -121,6 +110,8 @@ router.post("/whatsapp", verifyWhatsAppSignature, async (req, res, next) => {
     }
 
     await Promise.all(jobs.map((job) => enqueueMessage(job)));
+    const duration = Date.now() - receivedAt.getTime();
+    res.set("x-response-time-ms", String(duration));
     return res.status(200).json({ received: true, queued: jobs.length });
   } catch (error) {
     console.error("[WEBHOOK ERROR]", error);

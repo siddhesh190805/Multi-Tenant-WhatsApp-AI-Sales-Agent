@@ -1,0 +1,15 @@
+{
+  "name": "multi-tenant-whatsapp-ai-sales-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multi-Tenant WhatsApp AI Sales Agent Assessment",
+  "scripts": {
+    "seed": "npm --prefix backend run seed",
+    "simulate": "npm --prefix backend run simulate",
+    "load100": "npm --prefix backend run load100",
+    "dev": "npm --prefix backend run dev",
+    "worker": "npm --prefix backend run worker",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "test": "npm --prefix backend test"
+  }
+}
