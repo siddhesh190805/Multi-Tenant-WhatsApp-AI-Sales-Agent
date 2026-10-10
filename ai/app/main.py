@@ -7,7 +7,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
-from app.rag import retrieve_tenant_knowledge, format_retrieved_context
+from app.rag import retrieve_tenant_knowledge, format_retrieved_context, get_rag_telemetry
 
 class Message(BaseModel):
     direction: str
@@ -294,4 +294,10 @@ def rag_search(request: RagSearchRequest):
         "results": chunks,
         "formattedContext": format_retrieved_context(chunks),
     }
+
+
+@app.get("/rag/info")
+def rag_info():
+    """Inspect the active vector database, embedding model, and collections."""
+    return get_rag_telemetry()
 
