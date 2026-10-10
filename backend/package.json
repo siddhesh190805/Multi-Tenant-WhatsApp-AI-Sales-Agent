@@ -10,6 +10,7 @@
     "worker": "node src/worker.js",
     "seed": "node scripts/seed.js",
     "simulate": "node scripts/simulate.js",
+    "verify": "node scripts/verify-production-all.js",
     "load100": "node scripts/load100.js",
     "lint": "eslint .",
     "test": "node --test"

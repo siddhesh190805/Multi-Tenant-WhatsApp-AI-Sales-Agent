@@ -21,9 +21,8 @@ async function send(payload) {
     "content-type": "application/json",
     "content-length": Buffer.byteLength(body),
   };
-  if (process.env.WHATSAPP_APP_SECRET) {
-    headers["x-hub-signature-256"] = "sha256=" + crypto.createHmac("sha256", process.env.WHATSAPP_APP_SECRET).update(body).digest("hex");
-  }
+  const secret = process.env.WHATSAPP_APP_SECRET || "local-webhook-test";
+  headers["x-hub-signature-256"] = "sha256=" + crypto.createHmac("sha256", secret).update(body).digest("hex");
 
   const start = Date.now();
   return new Promise((resolve, reject) => {

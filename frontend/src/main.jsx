@@ -23,7 +23,14 @@ function App() {
     setSession(null);
   }
 
-  if (checking) return <main className="loading-screen">Loading...</main>;
+  if (checking) {
+    return (
+      <main className="loading-screen">
+        <div className="spinner" />
+        <p style={{ color: "var(--text-muted)", fontSize: 13, fontWeight: 500 }}>Initializing workspace…</p>
+      </main>
+    );
+  }
   if (!session) return <LoginPage onLogin={login} />;
   return <DashboardPage session={session} onLogout={logout} />;
 }

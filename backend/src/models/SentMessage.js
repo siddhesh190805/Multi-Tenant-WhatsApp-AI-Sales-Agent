@@ -6,7 +6,7 @@ const sentMessageSchema = new mongoose.Schema(
     phoneNumberId: { type: String, required: true },
     to: { type: String, required: true },
     text: { type: String, required: true },
-    replyToWaMessageId: { type: String, required: true, index: true },
+    replyToWaMessageId: { type: String, required: false, default: null, index: true },
     sentAt: { type: Date, default: Date.now },
   },
   { timestamps: true },

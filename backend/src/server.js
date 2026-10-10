@@ -10,8 +10,9 @@ const { subscribeEvents } = require("./services/eventBus");
 function socketAccountId(socket) {
   const cookie = socket.request.headers.cookie || "";
   const match = cookie.match(/(?:^|; )token=([^;]+)/);
-  if (!match) return null;
-  try { return jwt.verify(decodeURIComponent(match[1]), getEnv().jwtSecret).accountId; } catch { return null; }
+  const rawToken = match ? decodeURIComponent(match[1]) : (socket.handshake.auth?.token || socket.handshake.query?.token || null);
+  if (!rawToken) return null;
+  try { return jwt.verify(rawToken, getEnv().jwtSecret).accountId; } catch { return null; }
 }
 async function start() {
   const env = getEnv();
