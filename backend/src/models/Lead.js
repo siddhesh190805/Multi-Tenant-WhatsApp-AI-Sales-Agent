@@ -9,6 +9,7 @@ const leadSchema = new mongoose.Schema(
     humanTakeover: { type: Boolean, default: false },
     messageSequence: { type: Number, default: 0 },
     lastMessageAt: { type: Date, default: Date.now, index: true },
+    metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true },
 );

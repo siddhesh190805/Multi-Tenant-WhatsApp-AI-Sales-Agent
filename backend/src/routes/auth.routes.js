@@ -19,11 +19,11 @@ router.post("/login", async (req, res, next) => {
     res.cookie("token", result.token, {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: process.env.COOKIE_SECURE === "true",
       maxAge: 8 * 60 * 60 * 1000,
     });
 
-    return res.json({ user: result.user });
+    return res.json({ user: result.user, token: result.token });
   } catch (error) {
     return next(error);
   }

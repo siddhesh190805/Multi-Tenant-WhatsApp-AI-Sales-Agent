@@ -42,6 +42,7 @@ router.post("/whatsapp", verifyWhatsAppSignature, async (req, res, next) => {
   const receivedAt = new Date();
   try {
     const jobs = [];
+    const persistTasks = [];
 
     for (const entry of req.body?.entry || []) {
       for (const change of entry?.changes || []) {
@@ -67,49 +68,23 @@ router.post("/whatsapp", verifyWhatsAppSignature, async (req, res, next) => {
             continue;
           }
 
-          const lead = await Lead.findOneAndUpdate(
-            { accountId: tenant.accountId, phone: leadPhone },
-            {
-              $set: { name: leadName, lastMessageAt: receivedAt },
-              $inc: { messageSequence: 1 },
-              $setOnInsert: { accountId: tenant.accountId, phone: leadPhone, status: "new", humanTakeover: false },
-            },
-            { upsert: true, new: true, setDefaultsOnInsert: true },
-          );
-
-          try {
-            await Message.create({
-              accountId: tenant.accountId,
-              leadId: lead._id,
-              waMessageId: message.id,
-              direction: "in",
-              sender: "lead",
-              text: message.text.body,
-              sequence: lead.messageSequence,
-              createdAt: receivedAt,
-            });
-          } catch (error) {
-            if (error?.code === 11000) {
-              console.log(`[WEBHOOK CONCURRENT DUPLICATE] accountId=${tenant.accountId} waMessageId=${message.id}`);
-              continue;
-            }
-            throw error;
-          }
-
-          jobs.push({
+          const jobData = {
             accountId: tenant.accountId,
-            leadId: String(lead._id),
-            messageId: message.id,
             phoneNumberId,
+            leadPhone,
+            leadName,
+            messageId: message.id,
+            text: message.text.body,
             receivedAt: receivedAt.toISOString(),
             debounceMs: getEnv().debounceMs,
-          });
-          console.log("[WEBHOOK] accountId=" + tenant.accountId + " leadId=" + lead._id + " waMessageId=" + message.id);
+          };
+          jobs.push(jobData);
+          console.log("[WEBHOOK] accountId=" + tenant.accountId + " waMessageId=" + message.id);
         }
       }
     }
 
-    await Promise.all(jobs.map((job) => enqueueMessage(job)));
+    jobs.forEach((job) => enqueueMessage(job).catch((err) => console.error("[ENQUEUE ERROR]", err)));
     const duration = Date.now() - receivedAt.getTime();
     res.set("x-response-time-ms", String(duration));
     return res.status(200).json({ received: true, queued: jobs.length });

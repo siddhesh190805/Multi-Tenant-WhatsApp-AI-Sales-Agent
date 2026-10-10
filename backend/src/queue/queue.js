@@ -17,6 +17,6 @@ const messageQueue = new Queue(MESSAGE_QUEUE_NAME, {
 const deadLetterQueue = new Queue(DLQ_QUEUE_NAME, { connection, defaultJobOptions: { removeOnComplete: { count: 500 } } });
 
 async function enqueueMessage(data) {
-  return messageQueue.add("process-message", data, { jobId: data.messageId, delay: data.debounceMs || 0 });
+  return messageQueue.add("process-message", data, { jobId: data.messageId });
 }
 module.exports = { MESSAGE_QUEUE_NAME, DLQ_QUEUE_NAME, messageQueue, deadLetterQueue, enqueueMessage };
