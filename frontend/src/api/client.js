@@ -1,10 +1,12 @@
 const TOKEN_KEY = "wa_auth_token";
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 
 async function request(path, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
   const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
 
-  const response = await fetch(path, {
+  const response = await fetch(url, {
     credentials: "include",
     headers: {
       "content-type": "application/json",

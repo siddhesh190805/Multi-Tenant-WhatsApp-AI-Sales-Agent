@@ -72,7 +72,8 @@ export function DashboardPage({ session, onLogout }) {
 
   useEffect(() => {
     const token = api.getToken();
-    const socket = io({
+    const apiUrl = import.meta.env.VITE_API_URL || undefined;
+    const socket = io(apiUrl, {
       withCredentials: true,
       auth: token ? { token } : undefined,
     });

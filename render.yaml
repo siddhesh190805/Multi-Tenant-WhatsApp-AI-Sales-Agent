@@ -1,0 +1,73 @@
+services:
+  # Backend API Server (Express + Socket.IO)
+  - type: web
+    name: whatsapp-ai-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: AI_SERVICE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WHATSAPP_MODE
+        value: mock
+      - key: WHATSAPP_APP_SECRET
+        value: local-webhook-test
+      - key: ENABLE_DEV_SIMULATION
+        value: "true"
+
+  # Python AI FastAPI Microservice (LangGraph + ChromaDB)
+  - type: web
+    name: whatsapp-ai-engine
+    runtime: python
+    plan: free
+    rootDir: ai
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+
+  # BullMQ Queue Worker
+  - type: worker
+    name: whatsapp-ai-worker
+    runtime: node
+    plan: starter
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm run worker
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: AI_SERVICE_URL
+        sync: false
+      - key: JWT_SECRET
+        fromService:
+          type: web
+          name: whatsapp-ai-backend
+          envVarKey: JWT_SECRET
+      - key: WHATSAPP_MODE
+        value: mock
+      - key: WHATSAPP_APP_SECRET
+        value: local-webhook-test
+      - key: ENABLE_DEV_SIMULATION
+        value: "true"
