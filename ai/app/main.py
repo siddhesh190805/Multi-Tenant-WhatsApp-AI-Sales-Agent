@@ -40,8 +40,28 @@ def _env(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()
 
 
+def _is_security_probe(text: str) -> bool:
+    """Robust detection for prompt injection, jailbreaks, and system prompt extraction."""
+    t = text.lower()
+    triggers = [
+        "prompt", "instruction", "system message", "developer mode", "jailbreak",
+        "dan mode", "unrestricted", "bypass", "override", "initialization", "guideline",
+        "repeat the text above", "what was written above", "who programmed you", "system role"
+    ]
+    actions = [
+        "ignore", "show", "reveal", "print", "display", "give", "tell", "what is", "what are",
+        "explain", "output", "view", "leak", "base", "internal", "hidden", "original", "previous", "disregard"
+    ]
+    if any(k in t for k in triggers):
+        if any(a in t for a in actions):
+            return True
+        if any(single in t for single in ["system prompt", "internal prompt", "base prompt", "jailbreak", "dan mode", "ignore all"]):
+            return True
+    return False
+
+
 def _mock_response(state: AgentState) -> tuple[str, list[dict]]:
-    """RAG-grounded response synthesis with autonomous intent classification."""
+    """RAG-grounded response synthesis with autonomous intent classification and security filtering."""
     messages = state["messages"]
     latest = messages[-1]["text"] if messages else ""
     history = " ".join(m.get("text", "") for m in messages)
@@ -50,6 +70,10 @@ def _mock_response(state: AgentState) -> tuple[str, list[dict]]:
     actions = []
 
     lower_latest = latest.lower()
+
+    # 0. Prompt Injection & System Extraction Defense Guard
+    if _is_security_probe(latest):
+        return f"I am the sales assistant for {business_name}. I can only assist with our property details, pricing, and scheduling visits.", actions
 
     # 1. Autonomous Intent Triggers (Tool Calling)
     if any(k in lower_latest for k in ["talk to human", "speak with agent", "human agent", "talk to person", "real person", "insaan", "human please", "agent please", "call me"]):
@@ -69,16 +93,18 @@ def _mock_response(state: AgentState) -> tuple[str, list[dict]]:
                 return f"Your name is {name.capitalize()}.", actions
         return "Aapka naam Amit hai.", actions
 
-    # 3. Dynamic RAG Vector Retrieval
+    # 3. Dynamic RAG Vector Retrieval (Filtered for customer-facing knowledge only)
     retrieved = retrieve_tenant_knowledge(tenant, latest, top_k=3)
     if retrieved and retrieved[0]["score"] > 0:
-        top_chunk = retrieved[0]
-        content = top_chunk["content"]
-        if top_chunk["category"] == "faq" and "Answer:" in content:
-            return content.split("Answer:", 1)[1].strip(), actions
-        if top_chunk["category"] == "pricing":
-            return content, actions
-        return content, actions
+        for chunk in retrieved:
+            # Never return internal system overview or guidelines as customer replies
+            if chunk.get("category") == "overview":
+                continue
+            content = chunk["content"]
+            if chunk["category"] == "faq" and "Answer:" in content:
+                return content.split("Answer:", 1)[1].strip(), actions
+            if chunk["category"] == "pricing":
+                return content, actions
 
     # Fallback default inquiry
     pricing = tenant.get("pricing", "").strip()
@@ -128,6 +154,11 @@ def _llm_response(state: AgentState):
         f"{m['sender']}: {m['text']}" for m in state["messages"]
     )
     latest_msg = state["messages"][-1]["text"] if state["messages"] else ""
+
+    # Prompt Injection & Extraction Defense Guard
+    if _is_security_probe(latest_msg):
+        business_name = tenant.get("businessName", "our company")
+        return f"I am the sales assistant for {business_name}. I can only assist with our property details, pricing, and scheduling visits.", {"input": 0, "output": 0, "total": 0}, []
     
     # Dynamic RAG Retrieval for this tenant
     retrieved_knowledge = retrieve_tenant_knowledge(tenant, latest_msg, top_k=4)

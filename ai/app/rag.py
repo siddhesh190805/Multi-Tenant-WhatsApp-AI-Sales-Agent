@@ -80,12 +80,8 @@ def index_tenant_knowledge(tenant: Dict[str, Any]):
     metadatas: List[Dict[str, Any]] = []
     ids: List[str] = []
 
-    # 1. Business Overview Chunk
-    tone = tenant.get("tone", "Professional")
-    lang = tenant.get("language", "English")
-    docs.append(f"{business_name} sales assistant. Tone: {tone}. Language guideline: {lang}.")
-    metadatas.append({"category": "overview", "title": f"Business Profile of {business_name}"})
-    ids.append(f"{col_name}_overview")
+    # 1. Business Knowledge Chunks
+    # Only index customer-facing facts (pricing, amenities, FAQs). Internal instructions belong in system prompt.
 
     # 2. Pricing Chunks
     if pricing_str:
