@@ -8,13 +8,13 @@ export function LoginPage({ onLogin }) {
   const [busy, setBusy] = useState(false);
 
   async function submit(event) {
-    event.preventDefault();
+    if (event) event.preventDefault();
     setBusy(true);
     setError("");
     try {
-      await onLogin(email, password);
-    } catch {
-      setError("Invalid email or password. Please verify credentials.");
+      await onLogin(email.trim(), password);
+    } catch (err) {
+      setError(err?.message || "Invalid email or password. Please verify credentials.");
     } finally {
       setBusy(false);
     }
