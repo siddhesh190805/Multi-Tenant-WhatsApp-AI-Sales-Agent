@@ -1,7 +1,5 @@
 const express = require("express");
 const Tenant = require("../models/Tenant");
-const Lead = require("../models/Lead");
-const Message = require("../models/Message");
 const { enqueueMessage } = require("../queue/queue");
 const { getEnv } = require("../config/env");
 const { verifyWhatsAppSignature } = require("../middlewares/webhookSignature.middleware");
@@ -18,9 +16,21 @@ async function findTenantByPhoneNumberId(phoneNumberId) {
   const cached = tenantCache.get(phoneNumberId);
   if (cached && cached.expiresAt > now && cached.tenant) return cached.tenant;
   if (cached?.promise) return cached.promise;
+
   const promise = Tenant.findOne({ phoneNumberId }).lean()
-    .then((tenant) => { tenantCache.set(phoneNumberId, { tenant, expiresAt: Date.now() + TENANT_CACHE_TTL_MS }); return tenant; })
-    .catch((error) => { tenantCache.delete(phoneNumberId); throw error; });
+    .then((tenant) => {
+      if (tenant) {
+        tenantCache.set(phoneNumberId, { tenant, expiresAt: Date.now() + TENANT_CACHE_TTL_MS });
+      } else {
+        tenantCache.delete(phoneNumberId);
+      }
+      return tenant;
+    })
+    .catch((error) => {
+      tenantCache.delete(phoneNumberId);
+      throw error;
+    });
+
   tenantCache.set(phoneNumberId, { promise, expiresAt: now + TENANT_CACHE_TTL_MS });
   return promise;
 }
@@ -42,7 +52,6 @@ router.post("/whatsapp", verifyWhatsAppSignature, async (req, res, next) => {
   const receivedAt = new Date();
   try {
     const jobs = [];
-    const persistTasks = [];
 
     for (const entry of req.body?.entry || []) {
       for (const change of entry?.changes || []) {

@@ -1,5 +1,9 @@
 import os
+import re
 from typing import TypedDict
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
 from fastapi import FastAPI, HTTPException
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -61,15 +65,17 @@ def _is_security_probe(text: str) -> bool:
 
 
 def _mock_response(state: AgentState) -> tuple[str, list[dict]]:
-    """RAG-grounded response synthesis with autonomous intent classification and security filtering."""
+    """RAG-grounded response synthesis with autonomous intent classification, greeting detection, and security filtering."""
     messages = state["messages"]
     latest = messages[-1]["text"] if messages else ""
     history = " ".join(m.get("text", "") for m in messages)
     tenant = state["tenant"]
     business_name = tenant.get("businessName", "Business")
+    pricing_str = tenant.get("pricing", "").strip()
+    faqs = tenant.get("faqs", [])
     actions = []
 
-    lower_latest = latest.lower()
+    lower_latest = latest.lower().strip()
 
     # 0. Prompt Injection & System Extraction Defense Guard
     if _is_security_probe(latest):
@@ -93,25 +99,57 @@ def _mock_response(state: AgentState) -> tuple[str, list[dict]]:
                 return f"Your name is {name.capitalize()}.", actions
         return "Aapka naam Amit hai.", actions
 
-    # 3. Dynamic RAG Vector Retrieval (Filtered for customer-facing knowledge only)
+    # 3. Intelligent Greeting Detection (Handles "Hi", "Hello", "Hey", "Namaste", etc.)
+    clean_text = re.sub(r"[^\w\s]", "", lower_latest).strip()
+    clean_words = clean_text.split()
+    greetings = {"hi", "hello", "hey", "hie", "hii", "heya", "namaste", "pranam", "good morning", "good afternoon", "good evening", "howdy", "hola"}
+    is_greeting = clean_text in greetings or (len(clean_words) <= 2 and clean_words and clean_words[0] in {"hi", "hello", "hey", "hie", "hii", "namaste", "pranam"})
+    
+    if is_greeting:
+        if any(w in clean_text for w in ["namaste", "pranam"]):
+            return f"Namaste! {business_name} me aapka swagat hai. Main aapki kya sahayata kar sakta hoon?", actions
+        return f"Hello! Welcome to {business_name}. How can I help you today?", actions
+
+    # 4. Pricing & Plans Inquiries
+    pricing_keywords = ["price", "pricing", "cost", "rate", "kitna", "plan", "plans", "fees", "fee", "charge", "charges", "package", "packages"]
+    if any(k in lower_latest for k in pricing_keywords):
+        if pricing_str:
+            sentences = [s.strip() for s in re.split(r"[.\n]", pricing_str) if len(s.strip()) > 3]
+            for s in sentences:
+                s_words = set(re.findall(r"\w+", s.lower()))
+                q_words = set(re.findall(r"\w+", lower_latest))
+                overlap = (s_words & q_words) - set(pricing_keywords) - {"is", "the", "a", "an", "start", "starts", "at", "ka", "hai", "what"}
+                if overlap:
+                    return s, actions
+            return pricing_str, actions
+
+    # 5. Dynamic Semantic FAQ Matching (Keyword Overlap across any tenant)
+    best_faq_match = None
+    best_overlap_count = 0
+    query_words = set(re.findall(r"\w+", lower_latest)) - {"what", "where", "is", "the", "are", "do", "you", "have", "kya", "hai", "ka", "ke", "ki", "ko", "in", "on", "at", "near"}
+
+    for faq in faqs:
+        q_text = (faq.get("q") or faq.get("question", "")).lower()
+        faq_words = set(re.findall(r"\w+", q_text))
+        overlap = query_words & faq_words
+        if len(overlap) > best_overlap_count:
+            best_overlap_count = len(overlap)
+            best_faq_match = faq.get("a") or faq.get("answer", "")
+
+    if best_faq_match and best_overlap_count >= 1:
+        return best_faq_match, actions
+
+    # 6. High-Confidence Vector RAG Search (Threshold >= 0.75)
     retrieved = retrieve_tenant_knowledge(tenant, latest, top_k=3)
-    if retrieved and retrieved[0]["score"] > 0:
-        for chunk in retrieved:
-            # Never return internal system overview or guidelines as customer replies
-            if chunk.get("category") == "overview":
-                continue
-            content = chunk["content"]
-            if chunk["category"] == "faq" and "Answer:" in content:
-                return content.split("Answer:", 1)[1].strip(), actions
-            if chunk["category"] == "pricing":
-                return content, actions
+    if retrieved and retrieved[0].get("score", 0) >= 0.75:
+        top_chunk = retrieved[0]
+        if top_chunk.get("category") == "faq" and "Answer:" in top_chunk["content"]:
+            return top_chunk["content"].split("Answer:", 1)[1].strip(), actions
+        if top_chunk.get("category") == "pricing":
+            return top_chunk["content"], actions
 
-    # Fallback default inquiry
-    pricing = tenant.get("pricing", "").strip()
-    if any(w in lower_latest for w in ["price", "pricing", "cost", "rate", "kitna", "plan"]) and pricing:
-        return pricing, actions
-
-    return f"Thanks for contacting {business_name}. How can I help you today?", actions
+    # 7. Contextual Fallback based on Tenant
+    return f"Thank you for contacting {business_name}. How can I assist you with our services, pricing, or bookings today?", actions
 
 
 def _build_model():
@@ -212,13 +250,15 @@ Strict Operational Rules:
 - If more details are needed, invoke lookup_business_info(query).
 """
     tools = [lookup_business_info, update_lead_status, book_site_visit, handoff_to_human]
-    bound = model.bind_tools(tools)
-    response = bound.invoke(
-        [
-            ("system", system),
-            ("human", f"Conversation:\n{conversation}\n\nWrite the next assistant reply."),
-        ]
-    )
+    prompt_messages = [
+        ("system", system),
+        ("human", f"Conversation:\n{conversation}\n\nWrite the next assistant reply."),
+    ]
+    try:
+        bound = model.bind_tools(tools)
+        response = bound.invoke(prompt_messages)
+    except Exception:
+        response = model.invoke(prompt_messages)
     messages = [response]
     if getattr(response, "tool_calls", None):
         tool_map = {t.name: t for t in tools}

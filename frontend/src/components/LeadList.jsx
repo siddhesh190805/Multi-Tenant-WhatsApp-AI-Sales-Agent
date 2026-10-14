@@ -26,7 +26,13 @@ function formatRelativeTime(dateString) {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-export function LeadList({ leads, selectedId, onSelect, onSearch }) {
+export function LeadList({
+  leads,
+  selectedId,
+  typingLeads = new Set(),
+  onSelect,
+  onSearch,
+}) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all"); // 'all' | 'ai' | 'human'
 
@@ -115,6 +121,7 @@ export function LeadList({ leads, selectedId, onSelect, onSearch }) {
             const isSelected = lead.id === selectedId;
             const displayName = lead.name || lead.phone || "Customer";
             const initial = displayName.charAt(0).toUpperCase();
+            const isLeadTyping = Boolean(typingLeads && typingLeads.has(lead.id));
 
             return (
               <div
@@ -138,12 +145,23 @@ export function LeadList({ leads, selectedId, onSelect, onSearch }) {
                   </div>
 
                   <div className="wa-chat-row-bottom">
-                    <span className="wa-chat-preview">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--wa-blue-tick)", flexShrink: 0 }}>
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                      {lead.lastMessageText || lead.phone}
-                    </span>
+                    {isLeadTyping ? (
+                      <span className="wa-chat-preview wa-typing-preview">
+                        <span className="wa-typing-dots-mini">
+                          <span />
+                          <span />
+                          <span />
+                        </span>
+                        typing...
+                      </span>
+                    ) : (
+                      <span className="wa-chat-preview">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--wa-blue-tick)", flexShrink: 0 }}>
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        {lead.lastMessageText || lead.phone}
+                      </span>
+                    )}
 
                     <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                       {lead.status && lead.status !== "new" && (

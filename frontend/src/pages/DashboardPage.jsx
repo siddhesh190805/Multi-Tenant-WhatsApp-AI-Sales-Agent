@@ -14,6 +14,7 @@ export function DashboardPage({ session, onLogout }) {
   const [socketConnected, setSocketConnected] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [simulatorOpen, setSimulatorOpen] = useState(false);
+  const [typingLeads, setTypingLeads] = useState(new Set());
 
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
@@ -86,10 +87,33 @@ export function DashboardPage({ session, onLogout }) {
       setSocketConnected(false);
     });
 
-    socket.on("message:new", () => {
+    socket.on("typing", (data) => {
+      if (!data?.leadId) return;
+      const targetId = String(data.leadId);
+      setTypingLeads((prev) => {
+        const next = new Set(prev);
+        if (data.isTyping) {
+          next.add(targetId);
+        } else {
+          next.delete(targetId);
+        }
+        return next;
+      });
+    });
+
+    socket.on("message:new", (data) => {
       refreshLeads();
       refreshMessages(selectedIdRef.current);
       refreshStats();
+
+      // Clear typing for this lead when response arrives
+      if (data?.leadId && data?.messageId && (data.messageId.startsWith("ai:") || data.messageId.startsWith("fallback:") || data.messageId.startsWith("human:"))) {
+        setTypingLeads((prev) => {
+          const next = new Set(prev);
+          next.delete(String(data.leadId));
+          return next;
+        });
+      }
     });
 
     socket.on("lead:updated", () => {
@@ -119,6 +143,11 @@ export function DashboardPage({ session, onLogout }) {
 
   async function sendTest(payload) {
     setBusy(true);
+    // Optimistically flag this lead as typing for zero-latency UI response
+    const targetLead = leads.find((l) => l.phone === payload.leadPhone) || selectedLead;
+    if (targetLead?.id) {
+      setTypingLeads((prev) => new Set([...prev, String(targetLead.id)]));
+    }
     try {
       await api.simulateMessage(payload);
       await Promise.all([refreshLeads(), refreshStats()]);
@@ -244,6 +273,7 @@ export function DashboardPage({ session, onLogout }) {
         <LeadList
           leads={leads}
           selectedId={selectedId}
+          typingLeads={typingLeads}
           onSelect={setSelectedId}
           onSearch={(q) => refreshLeads(q)}
         />
@@ -251,6 +281,7 @@ export function DashboardPage({ session, onLogout }) {
         <ChatWindow
           lead={selectedLead}
           messages={messages}
+          isAiTyping={Boolean(selectedLead && typingLeads.has(String(selectedLead.id)))}
           onToggleTakeover={toggleTakeover}
           onHumanSend={sendHuman}
           onSimulateLead={(text) => {

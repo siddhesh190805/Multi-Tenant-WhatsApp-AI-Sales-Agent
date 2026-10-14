@@ -12,6 +12,7 @@
     "simulate": "node scripts/simulate.js",
     "verify": "node scripts/verify-production-all.js",
     "load100": "node scripts/load100.js",
+    "add-tenant": "node scripts/add-tenant.js",
     "lint": "eslint .",
     "test": "node --test"
   },

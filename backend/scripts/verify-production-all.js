@@ -5,7 +5,7 @@ const { connectDatabase, disconnectDatabase } = require("../src/config/database"
 const Message = require("../src/models/Message");
 const Lead = require("../src/models/Lead");
 const User = require("../src/models/User");
-const Tenant = require("../src/models/Tenant");
+const _Tenant = require("../src/models/Tenant");
 const { deadLetterQueue } = require("../src/queue/queue");
 const { makePayload } = require("../src/routes/dev.routes");
 

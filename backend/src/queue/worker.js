@@ -66,6 +66,11 @@ async function processMessage(job) {
         sequence: lead.messageSequence,
         createdAt: new Date(receivedAt),
       });
+      await publishEvent({
+        accountId,
+        type: "message:new",
+        payload: { leadId: String(actualLeadId), messageId },
+      });
     } catch (err) {
       if (err?.code === 11000) {
         currentMessage = await Message.findOne({ accountId, leadId: actualLeadId, waMessageId: messageId, direction: "in" }).lean();
@@ -82,6 +87,14 @@ async function processMessage(job) {
   try {
     const leadDoc = await Lead.findOne({ _id: actualLeadId, accountId });
     if (!leadDoc || leadDoc.humanTakeover) return;
+
+    // Notify connected clients that AI is typing for this lead
+    await publishEvent({
+      accountId,
+      type: "typing",
+      payload: { leadId: String(actualLeadId), isTyping: true },
+    });
+
     if (getEnv().debounceEnabled) {
       await new Promise((resolve) => setTimeout(resolve, getEnv().debounceMs));
       const latestInbound = await Message.findOne({ accountId, leadId: actualLeadId, direction: "in" }).sort({ sequence: -1 }).lean();
@@ -144,6 +157,15 @@ async function processMessage(job) {
       }
     }
   } finally {
+    try {
+      await publishEvent({
+        accountId,
+        type: "typing",
+        payload: { leadId: String(actualLeadId), isTyping: false },
+      });
+    } catch {
+      // Ignore broadcast errors during cleanup
+    }
     await releaseTenantSlot(tenantSlot);
     await releaseLeadLock(lock);
   }

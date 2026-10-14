@@ -9,6 +9,7 @@ function formatMessageTime(dateString) {
 export function ChatWindow({
   lead,
   messages,
+  isAiTyping = false,
   onToggleTakeover,
   onHumanSend,
   onSimulateLead,
@@ -17,9 +18,30 @@ export function ChatWindow({
   const [simulating, setSimulating] = useState(false);
   const messagesEndRef = useRef(null);
 
+  // Check if the latest message is an inbound message from the customer
+  const lastMsg = messages && messages.length > 0 ? messages[messages.length - 1] : null;
+  const isLastMsgInbound = Boolean(
+    lastMsg &&
+    (lastMsg.direction === "in" ||
+      lastMsg.direction === "inbound" ||
+      lastMsg.sender === "lead")
+  );
+
+  // If recent inbound message within last 45 seconds with no reply yet, or explicit isAiTyping, or simulating
+  const recentInboundPending = Boolean(
+    isLastMsgInbound &&
+    (Date.now() - new Date(lastMsg.createdAt || Date.now()).getTime() < 45000)
+  );
+
+  const isTyping = Boolean(
+    lead &&
+    !lead.humanTakeover &&
+    (isAiTyping || simulating || recentInboundPending)
+  );
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, isTyping]);
 
   if (!lead) {
     return (
@@ -50,7 +72,8 @@ export function ChatWindow({
     try {
       await onSimulateLead(queryText);
     } finally {
-      setTimeout(() => setSimulating(false), 800);
+      // Keep simulating active briefly for smooth transition until response arrives
+      setTimeout(() => setSimulating(false), 1200);
     }
   }
 
@@ -72,7 +95,17 @@ export function ChatWindow({
                 </span>
               )}
               <span>•</span>
-              <span>{lead.humanTakeover ? "Human Mode Active" : "AI Agent Responding"}</span>
+              {isTyping ? (
+                <span className="wa-typing-header-status" title="AI Sales Assistant is responding...">
+                  <span className="wa-typing-badge-dot" />
+                  <span>typing</span>
+                  <span className="wa-typing-wave">
+                    <span>.</span><span>.</span><span>.</span>
+                  </span>
+                </span>
+              ) : (
+                <span>{lead.humanTakeover ? "Human Mode Active" : "AI Agent Responding"}</span>
+              )}
             </span>
           </div>
         </div>
@@ -157,6 +190,26 @@ export function ChatWindow({
             </div>
           );
         })}
+
+        {/* WhatsApp Authentic Three-Dot Typing Indicator */}
+        {isTyping && (
+          <div className="wa-bubble-wrap inbound wa-typing-wrap">
+            <div className="wa-bubble inbound wa-typing-bubble" aria-label="AI Sales Assistant is typing...">
+              <div className="wa-typing-bubble-author">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                </svg>
+                AI Sales Assistant
+              </div>
+              <div className="wa-typing-indicator">
+                <span className="wa-typing-dot" />
+                <span className="wa-typing-dot" />
+                <span className="wa-typing-dot" />
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
