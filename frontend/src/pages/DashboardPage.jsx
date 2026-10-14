@@ -71,6 +71,43 @@ export function DashboardPage({ session, onLogout }) {
     refreshMessages(selectedId);
   }, [selectedId, refreshMessages]);
 
+  const typingTimeoutsRef = useRef({});
+
+  const setLeadTyping = useCallback((leadId, isTyping) => {
+    if (!leadId) return;
+    const id = String(leadId);
+    if (typingTimeoutsRef.current[id]) {
+      clearTimeout(typingTimeoutsRef.current[id]);
+      delete typingTimeoutsRef.current[id];
+    }
+    setTypingLeads((prev) => {
+      const next = new Set(prev);
+      if (isTyping) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+    if (isTyping) {
+      // Auto-clear after 8s maximum safety timeout so typing indicator never hangs
+      typingTimeoutsRef.current[id] = setTimeout(() => {
+        setTypingLeads((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        delete typingTimeoutsRef.current[id];
+      }, 8000);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const last = messages && messages.length > 0 ? messages[messages.length - 1] : null;
+    if (last && (last.direction === "out" || last.direction === "outbound" || last.sender === "ai" || last.sender === "human" || last.sender === "fallback")) {
+      setLeadTyping(selectedId, false);
+    }
+  }, [messages, selectedId, setLeadTyping]);
+
   useEffect(() => {
     const token = api.getToken();
     const apiUrl = import.meta.env.VITE_API_URL || undefined;
@@ -89,16 +126,7 @@ export function DashboardPage({ session, onLogout }) {
 
     socket.on("typing", (data) => {
       if (!data?.leadId) return;
-      const targetId = String(data.leadId);
-      setTypingLeads((prev) => {
-        const next = new Set(prev);
-        if (data.isTyping) {
-          next.add(targetId);
-        } else {
-          next.delete(targetId);
-        }
-        return next;
-      });
+      setLeadTyping(data.leadId, data.isTyping);
     });
 
     socket.on("message:new", (data) => {
@@ -107,12 +135,8 @@ export function DashboardPage({ session, onLogout }) {
       refreshStats();
 
       // Clear typing for this lead when response arrives
-      if (data?.leadId && data?.messageId && (data.messageId.startsWith("ai:") || data.messageId.startsWith("fallback:") || data.messageId.startsWith("human:"))) {
-        setTypingLeads((prev) => {
-          const next = new Set(prev);
-          next.delete(String(data.leadId));
-          return next;
-        });
+      if (data?.leadId) {
+        setLeadTyping(data.leadId, false);
       }
     });
 
@@ -125,7 +149,7 @@ export function DashboardPage({ session, onLogout }) {
     return () => {
       socket.close();
     };
-  }, [refreshLeads, refreshMessages, refreshStats]);
+  }, [refreshLeads, refreshMessages, refreshStats, setLeadTyping]);
 
   const selectedLead = leads.find((lead) => lead.id === selectedId) || null;
 
@@ -146,7 +170,7 @@ export function DashboardPage({ session, onLogout }) {
     // Optimistically flag this lead as typing for zero-latency UI response
     const targetLead = leads.find((l) => l.phone === payload.leadPhone) || selectedLead;
     if (targetLead?.id) {
-      setTypingLeads((prev) => new Set([...prev, String(targetLead.id)]));
+      setLeadTyping(targetLead.id, true);
     }
     try {
       await api.simulateMessage(payload);

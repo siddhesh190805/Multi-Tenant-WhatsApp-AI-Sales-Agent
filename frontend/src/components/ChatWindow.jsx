@@ -18,25 +18,23 @@ export function ChatWindow({
   const [simulating, setSimulating] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Check if the latest message is an inbound message from the customer
+  // Check if the latest message is an outbound message from AI or human
   const lastMsg = messages && messages.length > 0 ? messages[messages.length - 1] : null;
-  const isLastMsgInbound = Boolean(
+  const lastMsgIsOutbound = Boolean(
     lastMsg &&
-    (lastMsg.direction === "in" ||
-      lastMsg.direction === "inbound" ||
-      lastMsg.sender === "lead")
+    (lastMsg.direction === "out" ||
+      lastMsg.direction === "outbound" ||
+      lastMsg.sender === "ai" ||
+      lastMsg.sender === "human" ||
+      lastMsg.sender === "fallback")
   );
 
-  // If recent inbound message within last 45 seconds with no reply yet, or explicit isAiTyping, or simulating
-  const recentInboundPending = Boolean(
-    isLastMsgInbound &&
-    (Date.now() - new Date(lastMsg.createdAt || Date.now()).getTime() < 45000)
-  );
-
+  // Show typing only when explicitly active AND not already resolved by an outbound response
   const isTyping = Boolean(
     lead &&
     !lead.humanTakeover &&
-    (isAiTyping || simulating || recentInboundPending)
+    !lastMsgIsOutbound &&
+    (isAiTyping || simulating)
   );
 
   useEffect(() => {
@@ -191,10 +189,10 @@ export function ChatWindow({
           );
         })}
 
-        {/* WhatsApp Authentic Three-Dot Typing Indicator */}
+        {/* WhatsApp Authentic Three-Dot Typing Indicator (Outbound AI side) */}
         {isTyping && (
-          <div className="wa-bubble-wrap inbound wa-typing-wrap">
-            <div className="wa-bubble inbound wa-typing-bubble" aria-label="AI Sales Assistant is typing...">
+          <div className="wa-bubble-wrap outbound wa-typing-wrap">
+            <div className="wa-bubble outbound-ai wa-typing-bubble" aria-label="AI Sales Assistant is typing...">
               <div className="wa-typing-bubble-author">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />

@@ -48,6 +48,40 @@ def _sanitize_collection_name(name: str) -> str:
     return f"t_{cleaned}"
 
 
+import hashlib
+
+_BaseEF = chromadb.EmbeddingFunction if chromadb is not None else object
+
+class LightweightEmbeddingFunction(_BaseEF):
+    """Zero-download deterministic vector embedding using hashing trick for instant offline cosine similarity."""
+    def __init__(self):
+        super().__init__()
+
+    def name(self) -> str:
+        return "lightweight_hasher"
+
+    def __call__(self, input: List[str]) -> List[List[float]]:
+        dim = 128
+        embeddings = []
+        for text in input:
+            vec = [0.0] * dim
+            tokens = re.findall(r"\w+", text.lower())
+            if not tokens:
+                embeddings.append([1.0 / (dim ** 0.5)] * dim)
+                continue
+            for token in tokens:
+                h = int(hashlib.md5(token.encode("utf-8")).hexdigest(), 16)
+                idx = h % dim
+                sign = 1.0 if (h // dim) % 2 == 0 else -1.0
+                vec[idx] += sign
+            norm = sum(x * x for x in vec) ** 0.5
+            if norm > 0:
+                vec = [x / norm for x in vec]
+            embeddings.append(vec)
+        return embeddings
+
+_fast_embedder = LightweightEmbeddingFunction()
+
 # Cache tracking which collections have already been synced with current tenant data
 _SYNCED_COLLECTIONS: set[str] = set()
 
@@ -67,13 +101,14 @@ def index_tenant_knowledge(tenant: Dict[str, Any]):
 
     if cache_key in _SYNCED_COLLECTIONS:
         try:
-            return client.get_collection(col_name)
+            return client.get_collection(col_name, embedding_function=_fast_embedder)
         except Exception:
             pass
 
     collection = client.get_or_create_collection(
         name=col_name,
         metadata={"tenant": business_name, "hnsw:space": "cosine"},
+        embedding_function=_fast_embedder,
     )
 
     docs: List[str] = []
